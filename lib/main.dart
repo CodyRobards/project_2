@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 void main() {
@@ -54,17 +56,104 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  static const String _initialResourceName = 'Stardust';
+  static const double _initialClickValue = 1;
+  static const double _clickValueIncrease = 1;
+  static const double _initialPassiveIncome = 0;
+  static const double _passiveIncomeIncrease = 0.5;
+  static const double _initialClickUpgradeCost = 10;
+  static const double _initialPassiveUpgradeCost = 15;
+  static const double _clickCostMultiplier = 1.6;
+  static const double _passiveCostMultiplier = 1.7;
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+  late String _resourceName;
+  late double _resourceAmount;
+  late double _clickValue;
+  late double _passiveIncome;
+  late int _clickUpgradeLevel;
+  late int _passiveUpgradeLevel;
+  late double _clickUpgradeCost;
+  late double _passiveUpgradeCost;
+
+  Timer? _passiveTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeState();
+    _startPassiveTimer();
+  }
+
+  @override
+  void dispose() {
+    _passiveTimer?.cancel();
+    super.dispose();
+  }
+
+  void _initializeState() {
+    _resourceName = _initialResourceName;
+    _resourceAmount = 0;
+    _clickValue = _initialClickValue;
+    _passiveIncome = _initialPassiveIncome;
+    _clickUpgradeLevel = 0;
+    _passiveUpgradeLevel = 0;
+    _clickUpgradeCost = _initialClickUpgradeCost;
+    _passiveUpgradeCost = _initialPassiveUpgradeCost;
+  }
+
+  void _startPassiveTimer() {
+    _passiveTimer?.cancel();
+    _passiveTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted || _passiveIncome <= 0) {
+        return;
+      }
+      setState(() {
+        _resourceAmount += _passiveIncome;
+      });
     });
+  }
+
+  void _collectResource() {
+    setState(() {
+      _resourceAmount += _clickValue;
+    });
+  }
+
+  void _purchaseClickUpgrade() {
+    if (_resourceAmount < _clickUpgradeCost) {
+      return;
+    }
+    setState(() {
+      _resourceAmount -= _clickUpgradeCost;
+      _clickUpgradeLevel += 1;
+      _clickValue += _clickValueIncrease;
+      _clickUpgradeCost *= _clickCostMultiplier;
+    });
+  }
+
+  void _purchasePassiveUpgrade() {
+    if (_resourceAmount < _passiveUpgradeCost) {
+      return;
+    }
+    setState(() {
+      _resourceAmount -= _passiveUpgradeCost;
+      _passiveUpgradeLevel += 1;
+      _passiveIncome += _passiveIncomeIncrease;
+      _passiveUpgradeCost *= _passiveCostMultiplier;
+    });
+  }
+
+  void _resetGame() {
+    setState(() {
+      _initializeState();
+    });
+  }
+
+  String _formatNumber(double value) {
+    if (value >= 1000) {
+      return value.toStringAsFixed(0);
+    }
+    return value.toStringAsFixed(value.truncateToDouble() == value ? 0 : 1);
   }
 
   @override
@@ -75,48 +164,91 @@ class _MyHomePageState extends State<MyHomePage> {
     // The Flutter framework has been optimized to make rerunning build methods
     // fast, so that you can just rebuild anything that needs updating rather
     // than having to individually change instances of widgets.
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        backgroundColor: theme.colorScheme.inversePrimary,
+        title: Text('${widget.title} - $_resourceName'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Reset',
+            onPressed: _resetGame,
+          ),
+        ],
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: Padding(
+        padding: const EdgeInsets.all(24),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: <Widget>[
-            const Text('You have pushed the button this many times:'),
             Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+              'Resource: $_resourceName',
+              style: theme.textTheme.headlineSmall,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Amount: ${_formatNumber(_resourceAmount)}',
+              style: theme.textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Per Click: ${_formatNumber(_clickValue)} (Level $_clickUpgradeLevel)',
+              style: theme.textTheme.bodyLarge,
+            ),
+            Text(
+              'Passive Income: ${_formatNumber(_passiveIncome)} / sec (Level $_passiveUpgradeLevel)',
+              style: theme.textTheme.bodyLarge,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _collectResource,
+              icon: const Icon(Icons.touch_app),
+              label: const Text('Collect Stardust'),
+            ),
+            const SizedBox(height: 24),
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Upgrades',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 12),
+                    ElevatedButton(
+                      onPressed: _resourceAmount >= _clickUpgradeCost
+                          ? _purchaseClickUpgrade
+                          : null,
+                      child: Text(
+                        'Upgrade Click Power (Cost: ${_formatNumber(_clickUpgradeCost)})',
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: _resourceAmount >= _passiveUpgradeCost
+                          ? _purchasePassiveUpgrade
+                          : null,
+                      child: Text(
+                        'Upgrade Passive Income (Cost: ${_formatNumber(_passiveUpgradeCost)})',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const Spacer(),
+            OutlinedButton.icon(
+              onPressed: _resetGame,
+              icon: const Icon(Icons.restart_alt),
+              label: const Text('Reset Progress'),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
