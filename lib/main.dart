@@ -65,6 +65,10 @@ class _MyHomePageState extends State<MyHomePage> {
   static const double _initialPassiveUpgradeCost = 15;
   static const double _clickCostMultiplier = 1.6;
   static const double _passiveCostMultiplier = 1.7;
+  static const int _dayDurationSeconds = 20;
+  static const int _nightDurationSeconds = 12;
+  static const double _nightClickMultiplier = 1.8;
+  static const double _nightPassiveMultiplier = 0.6;
 
   late String _resourceName;
   late double _resourceAmount;
@@ -74,6 +78,8 @@ class _MyHomePageState extends State<MyHomePage> {
   late int _passiveUpgradeLevel;
   late double _clickUpgradeCost;
   late double _passiveUpgradeCost;
+  late bool _isNight;
+  late int _cycleSecondsRemaining;
 
   Timer? _passiveTimer;
 
@@ -99,23 +105,55 @@ class _MyHomePageState extends State<MyHomePage> {
     _passiveUpgradeLevel = 0;
     _clickUpgradeCost = _initialClickUpgradeCost;
     _passiveUpgradeCost = _initialPassiveUpgradeCost;
+    _isNight = false;
+    _cycleSecondsRemaining = _dayDurationSeconds;
   }
 
   void _startPassiveTimer() {
     _passiveTimer?.cancel();
     _passiveTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted || _passiveIncome <= 0) {
+      if (!mounted) {
         return;
       }
       setState(() {
-        _resourceAmount += _passiveIncome;
+        _advanceCycle();
+        final passiveGain = _currentPassiveIncome;
+        if (passiveGain > 0) {
+          _resourceAmount += passiveGain;
+        }
       });
     });
   }
 
+  void _advanceCycle() {
+    if (_cycleSecondsRemaining > 1) {
+      _cycleSecondsRemaining -= 1;
+      return;
+    }
+    _isNight = !_isNight;
+    _cycleSecondsRemaining =
+        _isNight ? _nightDurationSeconds : _dayDurationSeconds;
+  }
+
+  double get _currentClickValue =>
+      _isNight ? _clickValue * _nightClickMultiplier : _clickValue;
+
+  double get _currentPassiveIncome =>
+      _isNight ? _passiveIncome * _nightPassiveMultiplier : _passiveIncome;
+
+  double get _cycleProgress {
+    final totalSeconds =
+        _isNight ? _nightDurationSeconds : _dayDurationSeconds;
+    if (totalSeconds <= 0) {
+      return 0;
+    }
+    return 1 - (_cycleSecondsRemaining / totalSeconds);
+  }
+
   void _collectResource() {
+    final clickGain = _currentClickValue;
     setState(() {
-      _resourceAmount += _clickValue;
+      _resourceAmount += clickGain;
     });
   }
 
@@ -165,6 +203,13 @@ class _MyHomePageState extends State<MyHomePage> {
     // fast, so that you can just rebuild anything that needs updating rather
     // than having to individually change instances of widgets.
     final theme = Theme.of(context);
+    final cyclePhase = _isNight ? 'Night' : 'Day';
+    final nextPhaseLabel = _isNight ? 'Daybreak' : 'Nightfall';
+    final clickBonusPercent = ((_nightClickMultiplier - 1) * 100).round();
+    final passivePercent = (_nightPassiveMultiplier * 100).round();
+    final cycleMessage = _isNight
+        ? 'Night surge: clicks earn +$clickBonusPercent% while passive production coasts at $passivePercent% efficiency until daybreak.'
+        : 'Daylight stability keeps passive income at full strength. Prepare for nightfall\'s +$clickBonusPercent% click burst balanced by passive at $passivePercent%.';
     return Scaffold(
       appBar: AppBar(
         backgroundColor: theme.colorScheme.inversePrimary,
@@ -192,12 +237,48 @@ class _MyHomePageState extends State<MyHomePage> {
               style: theme.textTheme.headlineMedium,
             ),
             const SizedBox(height: 16),
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'Celestial Cycle',
+                      style: theme.textTheme.titleMedium,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Current Phase: $cyclePhase',
+                      style: theme.textTheme.bodyLarge,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Next shift in $_cycleSecondsRemaining s ($nextPhaseLabel)',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                    const SizedBox(height: 12),
+                    LinearProgressIndicator(
+                      value: _cycleProgress,
+                      minHeight: 6,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      cycleMessage,
+                      style: theme.textTheme.bodyMedium,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             Text(
-              'Per Click: ${_formatNumber(_clickValue)} (Level $_clickUpgradeLevel)',
+              'Per Click: ${_formatNumber(_currentClickValue)} (Base ${_formatNumber(_clickValue)}, Level $_clickUpgradeLevel)',
               style: theme.textTheme.bodyLarge,
             ),
             Text(
-              'Passive Income: ${_formatNumber(_passiveIncome)} / sec (Level $_passiveUpgradeLevel)',
+              'Passive Income: ${_formatNumber(_currentPassiveIncome)} / sec (Base ${_formatNumber(_passiveIncome)}, Level $_passiveUpgradeLevel)',
               style: theme.textTheme.bodyLarge,
             ),
             const SizedBox(height: 24),
